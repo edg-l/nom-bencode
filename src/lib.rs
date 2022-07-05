@@ -1,7 +1,7 @@
 //! [![Version](https://img.shields.io/crates/v/nom_bencode)](https://crates.io/crates/nom_bencode)
 //! [![Downloads](https://img.shields.io/crates/d/nom_bencode)](https://crates.io/crates/nom_bencode)
 //! [![License](https://img.shields.io/crates/l/nom_bencode)](https://crates.io/crates/nom_bencode)
-//! ![Rust](https://github.com/edg-l/nom_bencode/workflows/Rust/badge.svg)
+//! ![Rust](https://github.com/edg-l/nom-bencode/workflows/Rust/badge.svg)
 //! [![Docs](https://docs.rs/nom_bencode/badge.svg)](https://docs.rs/nom_bencode)
 //!
 //! A bencode parser written with nom.
