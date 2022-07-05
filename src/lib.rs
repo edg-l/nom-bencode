@@ -35,7 +35,7 @@ use nom::{
     sequence::{delimited, pair, preceded},
     IResult,
 };
-use std::{collections::HashMap, fmt::Debug, num::ParseIntError, str::Utf8Error};
+use std::{collections::HashMap, fmt::Debug, num::ParseIntError};
 
 type BenResult<'a> = IResult<&'a [u8], Value<'a>, Error<&'a [u8]>>;
 
@@ -47,8 +47,6 @@ pub enum Error<I> {
     InvalidBytesLength(I),
     #[error("parse int error: {0:?}")]
     ParseIntError(#[from] ParseIntError),
-    #[error("utf8 error: {0:?}")]
-    Utf8Error(#[from] Utf8Error),
     #[error("nom parsing error: {0:?}")]
     NomError(#[from] nom::error::Error<I>),
 }
@@ -98,10 +96,10 @@ impl<'a> Value<'a> {
         // SAFETY: Provided the combinators work correctly, this will always be a valid UTF-8 sequence.
         let value_str = unsafe { std::str::from_utf8_unchecked(value) };
 
-        if value_str.starts_with("-0") || (value_str.starts_with("0") && value_str.len() > 1) {
+        if value_str.starts_with("-0") || (value_str.starts_with('0') && value_str.len() > 1) {
             Err(Error::InvalidInteger(start_inp))?
         } else {
-            let value_integer = i64::from_str_radix(value_str, 10).map_err(Error::ParseIntError)?;
+            let value_integer: i64 = value_str.parse().map_err(Error::ParseIntError)?;
             Ok((inp, Value::Integer(value_integer)))
         }
     }
@@ -114,7 +112,7 @@ impl<'a> Value<'a> {
         // SAFETY: Provided the combinators work correctly, this will always be a valid UTF-8 sequence.
         let length = unsafe { std::str::from_utf8_unchecked(length) };
 
-        let length = u64::from_str_radix(length, 10).map_err(Error::ParseIntError)?;
+        let length: u64 = length.parse().map_err(Error::ParseIntError)?;
 
         if length == 0 {
             Err(Error::InvalidBytesLength(start_inp))?
@@ -174,7 +172,7 @@ impl<'a> Value<'a> {
     }
 }
 
-pub fn parse<'a>(source: &'a [u8]) -> Result<Vec<Value<'a>>, Error<&'a [u8]>> {
+pub fn parse(source: &[u8]) -> Result<Vec<Value>, Error<&[u8]>> {
     let (_, items) = many_till(
         alt((
             Value::parse_bytes,
