@@ -8,24 +8,22 @@
 
 A bencode parser written with nom.
 ```rust
-let data = parse(b"d3:cow3:moo4:spam4:eggse").unwrap();
+use nom_bencode::Value;
+
+let data = nom_bencode::parse(b"d3:cow3:moo4:spam4:eggse").unwrap();
 let v = data.first().unwrap();
-assert_matches!(v, Value::Dictionary(_));
 
 if let Value::Dictionary(dict) = v {
     let v = dict.get("cow".as_bytes()).unwrap();
-    assert_matches!(*v, Value::Bytes(b"moo"));
+
+    if let Value::Bytes(data) = v {
+        assert_eq!(data, b"moo");
+    }
 
     let v = dict.get("spam".as_bytes()).unwrap();
-    assert_matches!(*v, Value::Bytes(b"eggs"));
-}
-
-let (_, v) = Value::parse_dict(b"d4:spaml1:a1:bee").unwrap();
-assert_matches!(v, Value::Dictionary(_));
-
-if let Value::Dictionary(dict) = v {
-    let v = dict.get("spam".as_bytes()).unwrap();
-    assert_matches!(*v, Value::List(_));
+    if let Value::Bytes(data) = v {
+        assert_eq!(data, b"eggs");
+    }
 }
 ```
 

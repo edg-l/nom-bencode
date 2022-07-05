@@ -1,6 +1,6 @@
 [package]
 name = "nom_bencode"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Edgar <git@edgarluque.com>"]
 description = "A bencode parser written with nom."
 repository = "https://github.com/edg-l/nom-bencode/"
