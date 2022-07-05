@@ -1,6 +1,14 @@
 [package]
-name = "nom-bencode"
+name = "nom_bencode"
 version = "0.1.0"
+authors = ["Edgar <git@edgarluque.com>"]
+description = "A bencode parser written with nom."
+repository = "https://github.com/edg-l/nom-bencode/"
+license = "MIT OR Apache-2.0"
+keywords = ["bencode", "parser", "nom"]
+categories = ["parser-implementations"]
+documentation = "https://docs.rs/nom_bencode"
+readme = "README.md"
 edition = "2021"
 
 exclude = ["./test-assets/*"]
