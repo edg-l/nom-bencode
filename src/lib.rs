@@ -345,5 +345,8 @@ mod tests {
             let announce_list = dict.get("announce-list".as_bytes()).unwrap();
             assert_matches!(*announce_list, Value::List(_));
         }
+
+        let _ = parse(include_bytes!("../test-assets/private.torrent")).unwrap();
+        let _ = parse(include_bytes!("../test-assets/multi-file.torrent")).unwrap();
     }
 }
