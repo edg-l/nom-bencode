@@ -109,7 +109,7 @@ impl<'a> Value<'a> {
 
         let (inp, _) = char(':')(inp)?;
 
-        // SAFETY: Provided the combinators work correctly, this will always be a valid UTF-8 sequence.
+        // SAFETY: digit1 always returns ASCII numbers, which are always valid UTF-8.
         let length = unsafe { std::str::from_utf8_unchecked(length) };
 
         let length: u64 = length.parse().map_err(Error::ParseIntError)?;
