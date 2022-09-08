@@ -1,6 +1,6 @@
 [package]
 name = "nom_bencode"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Edgar <git@edgarluque.com>"]
 description = "A bencode parser written with nom."
 repository = "https://github.com/edg-l/nom-bencode/"
@@ -17,11 +17,11 @@ exclude = ["./test-assets/*"]
 
 [dependencies]
 nom = "7.1.1"
-thiserror = "1.0.31"
+thiserror = "1.0.34"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-criterion = { version = "0.3.5", features = ["html_reports"] }
+criterion = { version = "0.3.6", features = ["html_reports"] }
 
 [[bench]]
 name = "bencode_bench"
