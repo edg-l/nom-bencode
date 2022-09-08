@@ -12,13 +12,13 @@
 //! let v = data.first().unwrap();
 //!
 //! if let Value::Dictionary(dict) = v {
-//!     let v = dict.get("cow".as_bytes()).unwrap();
+//!     let v = dict.get(b"cow").unwrap();
 //! 
 //!     if let Value::Bytes(data) = v {
 //!         assert_eq!(data, b"moo");
 //!     }
 //!
-//!     let v = dict.get("spam".as_bytes()).unwrap();
+//!     let v = dict.get(b"spam").unwrap();
 //!     if let Value::Bytes(data) = v {
 //!         assert_eq!(data, b"eggs");
 //!     }
