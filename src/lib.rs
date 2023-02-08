@@ -7,13 +7,13 @@
 //! A bencode parser written with nom.
 //! ```rust
 //! use nom_bencode::Value;
-//! 
+//!
 //! let data = nom_bencode::parse(b"d3:cow3:moo4:spam4:eggse").unwrap();
 //! let v = data.first().unwrap();
 //!
 //! if let Value::Dictionary(dict) = v {
 //!     let v = dict.get("cow".as_bytes()).unwrap();
-//! 
+//!
 //!     if let Value::Bytes(data) = v {
 //!         assert_eq!(data, b"moo");
 //!     }
@@ -24,6 +24,13 @@
 //!     }
 //! }
 //! ```
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+#![deny(warnings)]
+#![deny(clippy::nursery)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::all)]
 
 use nom::{
     branch::alt,
@@ -39,26 +46,31 @@ use std::{collections::HashMap, fmt::Debug, num::ParseIntError};
 
 type BenResult<'a> = IResult<&'a [u8], Value<'a>, Error<&'a [u8]>>;
 
+/// Parser Errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error<I> {
+    /// A integer has an invalid form, e.g -0.
     #[error("invalid integer: {0:?}")]
     InvalidInteger(I),
+    /// A byte array length is invalid..
     #[error("invalid bytes length: {0:?}")]
     InvalidBytesLength(I),
+    /// A integer could not be parsed correctly.
     #[error("parse int error: {0:?}")]
     ParseIntError(#[from] ParseIntError),
+    /// Error from a nom parser.
     #[error("nom parsing error: {0:?}")]
     NomError(#[from] nom::error::Error<I>),
 }
 
 impl<I> From<Error<I>> for nom::Err<Error<I>> {
     fn from(e: Error<I>) -> Self {
-        nom::Err::Error(e)
+        Self::Error(e)
     }
 }
 
-impl<I> From<nom::Err<Error<I>>> for Error<I> {
-    fn from(e: nom::Err<Error<I>>) -> Self {
+impl<I> From<nom::Err<Self>> for Error<I> {
+    fn from(e: nom::Err<Self>) -> Self {
         e.into()
     }
 }
@@ -73,11 +85,16 @@ impl<I> ParseError<I> for Error<I> {
     }
 }
 
+/// A bencode value.
 #[derive(Debug, Clone)]
 pub enum Value<'a> {
+    /// A byte array.
     Bytes(&'a [u8]),
+    /// A integer.
     Integer(i64),
+    /// A list of other bencode values.
     List(Vec<Self>),
+    /// A dictionary of other bencode values.
     Dictionary(HashMap<&'a [u8], Self>),
 }
 
@@ -93,8 +110,8 @@ impl<'a> Value<'a> {
             char('e'),
         )(start_inp)?;
 
-        // SAFETY: Provided the combinators work correctly, this will always be a valid UTF-8 sequence.
-        let value_str = unsafe { std::str::from_utf8_unchecked(value) };
+        let value_str =
+            std::str::from_utf8(value).expect("value should be a valid integer str at this point");
 
         if value_str.starts_with("-0") || (value_str.starts_with('0') && value_str.len() > 1) {
             Err(Error::InvalidInteger(start_inp))?
@@ -109,13 +126,13 @@ impl<'a> Value<'a> {
 
         let (inp, _) = char(':')(inp)?;
 
-        // SAFETY: digit1 always returns ASCII numbers, which are always valid UTF-8.
-        let length = unsafe { std::str::from_utf8_unchecked(length) };
+        let length = std::str::from_utf8(length)
+            .expect("length should be a valid integer str at this point");
 
         let length: u64 = length.parse().map_err(Error::ParseIntError)?;
 
         if length == 0 {
-            Err(Error::InvalidBytesLength(start_inp))?
+            Err(Error::InvalidBytesLength(start_inp))?;
         }
 
         let (inp, characters) = take(length)(inp)?;
@@ -166,12 +183,16 @@ impl<'a> Value<'a> {
             }
         });
 
-        let map = HashMap::from_iter(data);
+        let map = data.collect();
 
         Ok((inp, Value::Dictionary(map)))
     }
 }
 
+/// Parses the provided bencode `source`.
+///
+/// # Errors
+/// Returns `Err` if there was an error parsing `source`.
 pub fn parse(source: &[u8]) -> Result<Vec<Value>, Error<&[u8]>> {
     let (_, items) = many_till(
         alt((
@@ -203,7 +224,7 @@ mod tests {
         assert_matches!(v, Value::Integer(-3));
 
         let (_, v) = Value::parse_integer(b"i333333e").unwrap();
-        assert_matches!(v, Value::Integer(333333));
+        assert_matches!(v, Value::Integer(333_333));
 
         let v = Value::parse_integer(b"i-0e").unwrap_err();
         assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
@@ -283,10 +304,10 @@ mod tests {
         assert_matches!(v, Value::Dictionary(_));
 
         if let Value::Dictionary(dict) = v {
-            let v = dict.get("cow".as_bytes()).unwrap();
+            let v = dict.get(b"cow".as_slice()).unwrap();
             assert_matches!(*v, Value::Bytes(b"moo"));
 
-            let v = dict.get("spam".as_bytes()).unwrap();
+            let v = dict.get(b"spam".as_slice()).unwrap();
             assert_matches!(*v, Value::Bytes(b"eggs"));
         }
 
@@ -294,7 +315,7 @@ mod tests {
         assert_matches!(v, Value::Dictionary(_));
 
         if let Value::Dictionary(dict) = v {
-            let v = dict.get("spam".as_bytes()).unwrap();
+            let v = dict.get(b"spam".as_slice()).unwrap();
             assert_matches!(*v, Value::List(_));
         }
     }
@@ -306,10 +327,10 @@ mod tests {
         assert_matches!(v, Value::Dictionary(_));
 
         if let Value::Dictionary(dict) = v {
-            let v = dict.get("cow".as_bytes()).unwrap();
+            let v = dict.get(b"cow".as_slice()).unwrap();
             assert_matches!(*v, Value::Bytes(b"moo"));
 
-            let v = dict.get("spam".as_bytes()).unwrap();
+            let v = dict.get(b"spam".as_slice()).unwrap();
             assert_matches!(*v, Value::Bytes(b"eggs"));
         }
 
@@ -317,7 +338,7 @@ mod tests {
         assert_matches!(v, Value::Dictionary(_));
 
         if let Value::Dictionary(dict) = v {
-            let v = dict.get("spam".as_bytes()).unwrap();
+            let v = dict.get(b"spam".as_slice()).unwrap();
             assert_matches!(*v, Value::List(_));
         }
     }
@@ -331,10 +352,10 @@ mod tests {
         assert_matches!(*v, Value::Dictionary(_));
 
         if let Value::Dictionary(dict) = v {
-            let info = dict.get("info".as_bytes()).unwrap();
+            let info = dict.get(b"info".as_slice()).unwrap();
             assert_matches!(*info, Value::Dictionary(_));
 
-            let announce = dict.get("announce".as_bytes()).unwrap();
+            let announce = dict.get(b"announce".as_slice()).unwrap();
             assert_matches!(*announce, Value::Bytes(_));
 
             if let Value::Bytes(announce) = *announce {
@@ -342,7 +363,7 @@ mod tests {
                 assert_eq!(announce, "udp://tracker.leechers-paradise.org:6969");
             }
 
-            let announce_list = dict.get("announce-list".as_bytes()).unwrap();
+            let announce_list = dict.get(b"announce-list".as_slice()).unwrap();
             assert_matches!(*announce_list, Value::List(_));
         }
 
