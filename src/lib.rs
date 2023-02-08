@@ -25,65 +25,30 @@
 //! }
 //! ```
 
+/*
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![deny(clippy::nursery)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::all)]
+ */
 
+use error::BencodeError;
 use nom::{
     branch::alt,
     bytes::complete::take,
     character::complete::{char, digit1},
     combinator::{eof, recognize},
-    error::ParseError,
-    multi::many_till,
+    multi::{many0, many_till},
     sequence::{delimited, pair, preceded},
-    IResult,
+    Err, IResult,
 };
-use std::{collections::HashMap, fmt::Debug, num::ParseIntError};
+use std::{collections::HashMap, fmt::Debug};
 
-type BenResult<'a> = IResult<&'a [u8], Value<'a>, Error<&'a [u8]>>;
+pub mod error;
 
-/// Parser Errors.
-#[derive(Debug, thiserror::Error)]
-pub enum Error<I> {
-    /// A integer has an invalid form, e.g -0.
-    #[error("invalid integer: {0:?}")]
-    InvalidInteger(I),
-    /// A byte array length is invalid..
-    #[error("invalid bytes length: {0:?}")]
-    InvalidBytesLength(I),
-    /// A integer could not be parsed correctly.
-    #[error("parse int error: {0:?}")]
-    ParseIntError(#[from] ParseIntError),
-    /// Error from a nom parser.
-    #[error("nom parsing error: {0:?}")]
-    NomError(#[from] nom::error::Error<I>),
-}
-
-impl<I> From<Error<I>> for nom::Err<Error<I>> {
-    fn from(e: Error<I>) -> Self {
-        Self::Error(e)
-    }
-}
-
-impl<I> From<nom::Err<Self>> for Error<I> {
-    fn from(e: nom::Err<Self>) -> Self {
-        e.into()
-    }
-}
-
-impl<I> ParseError<I> for Error<I> {
-    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        Self::NomError(nom::error::Error { input, code: kind })
-    }
-
-    fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
-        other
-    }
-}
+type BenResult<'a> = IResult<&'a [u8], Value<'a>, BencodeError<&'a [u8]>>;
 
 /// A bencode value.
 #[derive(Debug, Clone)]
@@ -99,7 +64,7 @@ pub enum Value<'a> {
 }
 
 impl<'a> Value<'a> {
-    fn parse_integer(start_inp: &'a [u8]) -> BenResult<'a> {
+    fn parse_integer(start_inp: &'a [u8]) -> BenResult {
         let (inp, value) = delimited(
             char('i'),
             alt((
@@ -114,9 +79,11 @@ impl<'a> Value<'a> {
             std::str::from_utf8(value).expect("value should be a valid integer str at this point");
 
         if value_str.starts_with("-0") || (value_str.starts_with('0') && value_str.len() > 1) {
-            Err(Error::InvalidInteger(start_inp))?
+            Err(nom::Err::Failure(BencodeError::InvalidInteger(start_inp)))
         } else {
-            let value_integer: i64 = value_str.parse().map_err(Error::ParseIntError)?;
+            let value_integer: i64 = value_str
+                .parse()
+                .map_err(|e| BencodeError::ParseIntError(inp, e))?;
             Ok((inp, Value::Integer(value_integer)))
         }
     }
@@ -129,10 +96,12 @@ impl<'a> Value<'a> {
         let length = std::str::from_utf8(length)
             .expect("length should be a valid integer str at this point");
 
-        let length: u64 = length.parse().map_err(Error::ParseIntError)?;
+        let length: u64 = length
+            .parse()
+            .map_err(|e| BencodeError::ParseIntError(inp, e))?;
 
         if length == 0 {
-            Err(Error::InvalidBytesLength(start_inp))?;
+            Err(BencodeError::InvalidBytesLength(start_inp))?;
         }
 
         let (inp, characters) = take(length)(inp)?;
@@ -193,24 +162,24 @@ impl<'a> Value<'a> {
 ///
 /// # Errors
 /// Returns `Err` if there was an error parsing `source`.
-pub fn parse(source: &[u8]) -> Result<Vec<Value>, Error<&[u8]>> {
-    let (_, items) = many_till(
-        alt((
-            Value::parse_bytes,
-            Value::parse_integer,
-            Value::parse_list,
-            Value::parse_dict,
-        )),
-        eof,
-    )(source)?;
+pub fn parse(source: &[u8]) -> Result<Vec<Value>, Err<BencodeError<&[u8]>>> {
+    let (source2, items) = many0(alt((
+        Value::parse_bytes,
+        Value::parse_integer,
+        Value::parse_list,
+        Value::parse_dict,
+    )))(source)?;
 
-    Ok(items.0)
+    let _ = eof(source2)?;
+
+    Ok(items)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{parse, Error, Value};
+    use crate::{parse, BencodeError, Value};
     use assert_matches::assert_matches;
+    use proptest::prelude::*;
 
     #[test]
     fn test_integer() {
@@ -227,22 +196,22 @@ mod tests {
         assert_matches!(v, Value::Integer(333_333));
 
         let v = Value::parse_integer(b"i-0e").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidInteger(_)));
 
         let v = Value::parse_integer(b"i00e").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidInteger(_)));
 
         let v = Value::parse_integer(b"i-00e").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidInteger(_)));
 
         let v = Value::parse_integer(b"i03e").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidInteger(_)));
 
         let v = Value::parse_integer(b"i0040e").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidInteger(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidInteger(_)));
 
         let v = Value::parse_integer(b"li3ee").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::NomError(_)));
+        assert_matches!(v, nom::Err::Error(BencodeError::Nom(..)));
     }
 
     #[test]
@@ -257,7 +226,7 @@ mod tests {
         assert_matches!(v, Value::Bytes(b"r"));
 
         let v = Value::parse_bytes(b"0:a").unwrap_err();
-        assert_matches!(v, nom::Err::Error(Error::InvalidBytesLength(_)));
+        assert_matches!(v, nom::Err::Failure(BencodeError::InvalidBytesLength(_)));
     }
 
     #[test]
@@ -344,6 +313,45 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_invalid_integer() {
+        let data = Value::parse_integer(b"123");
+        assert!(data.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_bytes() {
+        let data = Value::parse_bytes(b"123");
+        assert!(data.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_list() {
+        let data = Value::parse_list(b"123");
+        assert!(data.is_err());
+
+        let data = Value::parse_list(b"l123");
+        assert!(data.is_err());
+
+        let data = Value::parse_list(b"li1e");
+        assert!(data.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_dict() {
+        let data = Value::parse_dict(b"123");
+        assert!(data.is_err());
+
+        let data = Value::parse_dict(b"d123");
+        assert!(data.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_x() {
+        let data = parse(b"123");
+        assert!(data.is_err());
+    }
+
+    #[test]
     fn test_parse_torrent() {
         let data = parse(include_bytes!("../test-assets/big-buck-bunny.torrent")).unwrap();
         assert_eq!(data.len(), 1);
@@ -369,5 +377,12 @@ mod tests {
 
         let _ = parse(include_bytes!("../test-assets/private.torrent")).unwrap();
         let _ = parse(include_bytes!("../test-assets/multi-file.torrent")).unwrap();
+    }
+
+    proptest! {
+        #[test]
+        fn doesnt_panic(s in any::<Vec<u8>>()) {
+            parse(&s).ok();
+        }
     }
 }
