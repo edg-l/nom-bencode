@@ -25,16 +25,14 @@
 //! }
 //! ```
 
-/*
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![deny(clippy::nursery)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::all)]
- */
 
-use error::BencodeError;
+pub use errors::BencodeError;
 use nom::{
     branch::alt,
     bytes::complete::take,
@@ -42,11 +40,12 @@ use nom::{
     combinator::{eof, recognize},
     multi::{many0, many_till},
     sequence::{delimited, pair, preceded},
-    Err, IResult,
+    IResult,
 };
 use std::{collections::HashMap, fmt::Debug};
 
-pub mod error;
+pub mod errors;
+pub use nom::Err;
 
 type BenResult<'a> = IResult<&'a [u8], Value<'a>, BencodeError<&'a [u8]>>;
 
@@ -179,7 +178,7 @@ pub fn parse(source: &[u8]) -> Result<Vec<Value>, Err<BencodeError<&[u8]>>> {
 mod tests {
     use crate::{parse, BencodeError, Value};
     use assert_matches::assert_matches;
-    use proptest::prelude::*;
+    use proptest::{collection::vec, prelude::*};
 
     #[test]
     fn test_integer() {
@@ -379,10 +378,85 @@ mod tests {
         let _ = parse(include_bytes!("../test-assets/multi-file.torrent")).unwrap();
     }
 
+    prop_compose! {
+        fn bencode_bytes()(s in vec(any::<u8>(), 1..100)) -> Vec<u8> {
+            let mut data: Vec<u8> = Vec::with_capacity(s.len() + 5);
+            data.extend(format!("{}:", s.len()).as_bytes());
+            data.extend(s);
+            data
+        }
+    }
+
+    prop_compose! {
+        fn bencode_integer()(s in any::<i64>()) -> Vec<u8> {
+            format!("i{s}e").as_bytes().to_vec()
+        }
+    }
+
+    prop_compose! {
+        fn bencode_list()(s in vec((bencode_integer(), bencode_bytes()), 1..100)) -> Vec<u8> {
+            let mut data: Vec<u8> = Vec::with_capacity(s.len() + 2);
+            data.extend(b"l");
+            for (i, (a, b)) in s.iter().enumerate() {
+                if i % 2 == 0 {
+                    data.extend(a);
+                    data.extend(b);
+                } else {
+                    data.extend(b);
+                    data.extend(a);
+                }
+
+            }
+            data.extend(b"e");
+            data
+        }
+    }
+
+    prop_compose! {
+        fn bencode_dict()(s in vec((bencode_bytes(), bencode_bytes()), 1..100)) -> Vec<u8> {
+            let mut data: Vec<u8> = Vec::with_capacity(s.len() + 2);
+            data.extend(b"d");
+            for (i, (a, b)) in s.iter().enumerate() {
+                if i % 2 == 0 {
+                    data.extend(a);
+                    data.extend(b);
+                } else {
+                    data.extend(b);
+                    data.extend(a);
+                }
+            }
+            data.extend(b"e");
+            data
+        }
+    }
+
     proptest! {
         #[test]
-        fn doesnt_panic(s in any::<Vec<u8>>()) {
+        fn proptest_doesnt_panic_or_overflow(s in any::<Vec<u8>>()) {
             parse(&s).ok();
+        }
+
+        #[test]
+        fn proptest_parse_integer(s in bencode_integer()) {
+            prop_assert!(Value::parse_integer(&s).is_ok());
+        }
+
+        #[test]
+        fn proptest_parse_bytes(s in bencode_bytes()) {
+            let mut data: Vec<u8> = Vec::with_capacity(s.len() + 5);
+            data.extend(format!("{}:", s.len()).as_bytes());
+            data.extend(s);
+            prop_assert!(Value::parse_bytes(&data).is_ok());
+        }
+
+        #[test]
+        fn proptest_parse_list(s in bencode_list()) {
+            prop_assert!(Value::parse_list(&s).is_ok());
+        }
+
+        #[test]
+        fn proptest_parse_dict(s in bencode_dict()) {
+            prop_assert!(Value::parse_dict(&s).is_ok());
         }
     }
 }

@@ -1,10 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use nom_bencode::*;
 
-static SOURCE_BYTES_22KB: &'static [u8] = include_bytes!("../test-assets/big-buck-bunny.torrent");
-static SOURCE_BYTES_113KB: &'static [u8] = include_bytes!("../test-assets/private.torrent");
-static SOURCE_BYTES_218KB: &'static [u8] = include_bytes!("../test-assets/multi-file.torrent");
+static SOURCE_BYTES_22KB: &[u8] = include_bytes!("../test-assets/big-buck-bunny.torrent");
+static SOURCE_BYTES_113KB: &[u8] = include_bytes!("../test-assets/private.torrent");
+static SOURCE_BYTES_218KB: &[u8] = include_bytes!("../test-assets/multi-file.torrent");
 
-fn parse_source(src: &[u8]) -> Result<Vec<nom_bencode::Value>, nom_bencode::Error<&[u8]>> {
+fn parse_source(src: &[u8]) -> Result<Vec<Value>, Err<BencodeError<&[u8]>>> {
     nom_bencode::parse(src)
 }
 
